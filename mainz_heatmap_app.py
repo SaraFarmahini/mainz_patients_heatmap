@@ -6,6 +6,7 @@ import branca.colormap as cm
 from datetime import datetime, timedelta
 import os
 from streamlit_folium import folium_static
+from io import StringIO
 
 # Set page config for better performance
 st.set_page_config(
@@ -45,14 +46,26 @@ def check_password():
 
 if check_password():
     # Load data with caching
-    @st.cache_data(ttl=3600)  # Cache for 1 hour
+    @st.cache_data(ttl=3600, show_spinner=False)
     def load_data():
-        df = pd.read_csv('monthly_postal_counts.csv')
-        df['date'] = pd.to_datetime(df[['Year', 'Month']].assign(day=1))
+        try:
+            # First try to read from the repository
+            df = pd.read_csv('monthly_postal_counts.csv')
+        except FileNotFoundError:
+            # If file not found, use file uploader
+            uploaded_file = st.file_uploader("Upload monthly_postal_counts.csv", type=['csv'])
+            if uploaded_file is not None:
+                df = pd.read_csv(uploaded_file)
+            else:
+                st.error("Please upload the data file or ensure it exists in the repository")
+                return None
+        
+        if df is not None:
+            df['date'] = pd.to_datetime(df[['Year', 'Month']].assign(day=1))
         return df
 
     # Create map with caching
-    @st.cache_resource(ttl=3600)  # Cache for 1 hour
+    @st.cache_resource(ttl=3600, show_spinner=False)
     def create_base_map():
         return folium.Map(
             location=[49.9929, 8.2473],
@@ -61,7 +74,11 @@ if check_password():
             control_scale=True
         )
 
+    # Load data with error handling
     df = load_data()
+    if df is None:
+        st.stop()
+
     dates = sorted(df['date'].unique())
     
     # Create date range slider
