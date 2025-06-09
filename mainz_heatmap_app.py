@@ -6,6 +6,7 @@ import branca.colormap as cm
 from datetime import datetime, timedelta
 import os
 from streamlit_folium import folium_static
+from postal_codes import POSTAL_CODE_COORDINATES
 
 # Set page config
 st.set_page_config(
@@ -20,6 +21,9 @@ def load_data():
     try:
         df = pd.read_csv('monthly_postal_counts.csv')
         df['date'] = pd.to_datetime(df[['Year', 'Month']].assign(day=1))
+        # Filter out postal codes not in our list
+        valid_postal_codes = list(POSTAL_CODE_COORDINATES.keys())
+        df = df[df['Postal Code'].astype(str).isin(valid_postal_codes)]
         return df
     except Exception as e:
         st.error(f"Error loading data: {str(e)}")
@@ -30,18 +34,18 @@ df = load_data()
 if df is None:
     st.stop()
 
-# Get unique dates
+# Get unique dates (sorted)
 dates = sorted(df['date'].unique())
 
-# Create date selector
-selected_date = st.selectbox(
-    "Select Date",
+# Create date slider (drag left/right for months)
+selected_date = st.select_slider(
+    "Select Month",
     options=dates,
-    format_func=lambda x: x.strftime("%B %Y"),
-    index=0
+    value=dates[0],
+    format_func=lambda x: x.strftime("%B %Y")
 )
 
-# Filter data
+# Filter data for selected date
 df_selected = df[df['date'] == selected_date]
 
 # Create the map
@@ -65,22 +69,21 @@ for _, row in df_selected.iterrows():
     postal_code = str(row['Postal Code'])
     count = row['Patient_Count']
     
-    # Approximate coordinates based on postal code
-    lat = 49.9929 + (int(postal_code[-2:]) - 16) * 0.005
-    lon = 8.2473 + (int(postal_code[-2:]) - 16) * 0.005
-    
-    color = colormap(count)
-    
-    folium.CircleMarker(
-        location=[lat, lon],
-        radius=10,
-        popup=f'Postal Code: {postal_code}<br>Patients: {count}',
-        color=color,
-        fill=True,
-        fill_color=color,
-        fill_opacity=0.8,
-        weight=2
-    ).add_to(m)
+    # Use actual coordinates from our postal code data
+    if postal_code in POSTAL_CODE_COORDINATES:
+        lat, lon = POSTAL_CODE_COORDINATES[postal_code]
+        color = colormap(count)
+        
+        folium.CircleMarker(
+            location=[lat, lon],
+            radius=10,
+            popup=f'Postal Code: {postal_code}<br>Patients: {count}',
+            color=color,
+            fill=True,
+            fill_color=color,
+            fill_opacity=0.8,
+            weight=2
+        ).add_to(m)
 
 # Add the color map to the map
 colormap.add_to(m)
