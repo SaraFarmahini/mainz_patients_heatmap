@@ -7,10 +7,6 @@ from datetime import datetime, timedelta
 import os
 from streamlit_folium import folium_static
 
-# Clear all caches
-st.cache_data.clear()
-st.cache_resource.clear()
-
 # Set page config for better performance
 st.set_page_config(
     page_title="Mainz Patients Heatmap",
@@ -49,16 +45,23 @@ def check_password():
 
 if check_password():
     # Load data with caching
-    @st.cache_data
+    @st.cache_data(ttl=3600)  # Cache for 1 hour
     def load_data():
         df = pd.read_csv('monthly_postal_counts.csv')
-        # Create date column from Year and Month
         df['date'] = pd.to_datetime(df[['Year', 'Month']].assign(day=1))
         return df
 
+    # Create map with caching
+    @st.cache_resource(ttl=3600)  # Cache for 1 hour
+    def create_base_map():
+        return folium.Map(
+            location=[49.9929, 8.2473],
+            zoom_start=12,
+            tiles='OpenStreetMap',
+            control_scale=True
+        )
+
     df = load_data()
-    
-    # Get unique dates for the slider
     dates = sorted(df['date'].unique())
     
     # Create date range slider
@@ -73,12 +76,7 @@ if check_password():
     df_selected = df[df['date'] == selected_date]
     
     # Create the map
-    m = folium.Map(
-        location=[49.9929, 8.2473],
-        zoom_start=12,
-        tiles='OpenStreetMap',
-        control_scale=True
-    )
+    m = create_base_map()
     
     # Create a color map with more vibrant colors
     max_patients = df_selected['Patient_Count'].max() if not df_selected.empty else 1
@@ -113,8 +111,9 @@ if check_password():
     # Add the color map to the map
     colormap.add_to(m)
     
-    # Display the map using folium_static
-    folium_static(m, width=800, height=600)
+    # Display the map using folium_static with a loading spinner
+    with st.spinner('Loading map...'):
+        folium_static(m, width=800, height=600)
 
     # Display summary statistics
     st.write("### Summary Statistics")
