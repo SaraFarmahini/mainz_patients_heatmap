@@ -1,16 +1,12 @@
 import streamlit as st
 import pandas as pd
-import folium
-from folium import plugins
-import branca.colormap as cm
-from datetime import datetime, timedelta
+import plotly.express as px
+from datetime import datetime
 import os
-from streamlit_folium import folium_static
-from io import StringIO
 
 # Set page config for better performance
 st.set_page_config(
-    page_title="Mainz Patients Heatmap",
+    page_title="Mainz Patients Visualization",
     page_icon="🏥",
     layout="wide"
 )
@@ -64,16 +60,6 @@ if check_password():
             df['date'] = pd.to_datetime(df[['Year', 'Month']].assign(day=1))
         return df
 
-    # Create map with caching
-    @st.cache_resource(ttl=3600, show_spinner=False)
-    def create_base_map():
-        return folium.Map(
-            location=[49.9929, 8.2473],
-            zoom_start=12,
-            tiles='OpenStreetMap',
-            control_scale=True
-        )
-
     # Load data with error handling
     df = load_data()
     if df is None:
@@ -92,45 +78,26 @@ if check_password():
     # Filter data for selected date
     df_selected = df[df['date'] == selected_date]
     
-    # Create the map
-    m = create_base_map()
-    
-    # Create a color map with more vibrant colors
-    max_patients = df_selected['Patient_Count'].max() if not df_selected.empty else 1
-    colormap = cm.LinearColormap(
-        colors=['#1f77b4', '#2ca02c', '#ffd700', '#ff7f0e', '#d62728'],
-        vmin=0,
-        vmax=max_patients
+    # Create a bar chart using plotly
+    fig = px.bar(
+        df_selected,
+        x='Postal Code',
+        y='Patient_Count',
+        title=f'Patient Count by Postal Code - {selected_date.strftime("%B %Y")}',
+        labels={'Patient_Count': 'Number of Patients', 'Postal Code': 'Postal Code'},
+        color='Patient_Count',
+        color_continuous_scale='Viridis'
     )
     
-    # Add heatmap points with increased opacity
-    for _, row in df_selected.iterrows():
-        postal_code = str(row['Postal Code'])
-        count = row['Patient_Count']
-        
-        # Approximate coordinates based on postal code
-        lat = 49.9929 + (int(postal_code[-2:]) - 16) * 0.005
-        lon = 8.2473 + (int(postal_code[-2:]) - 16) * 0.005
-        
-        color = colormap(count)
-        
-        folium.CircleMarker(
-            location=[lat, lon],
-            radius=10,
-            popup=f'Postal Code: {postal_code}<br>Patients: {count}',
-            color=color,
-            fill=True,
-            fill_color=color,
-            fill_opacity=0.8,
-            weight=2
-        ).add_to(m)
+    # Update layout
+    fig.update_layout(
+        xaxis_title="Postal Code",
+        yaxis_title="Number of Patients",
+        showlegend=False
+    )
     
-    # Add the color map to the map
-    colormap.add_to(m)
-    
-    # Display the map using folium_static with a loading spinner
-    with st.spinner('Loading map...'):
-        folium_static(m, width=800, height=600)
+    # Display the chart
+    st.plotly_chart(fig, use_container_width=True)
 
     # Display summary statistics
     st.write("### Summary Statistics")
